@@ -152,4 +152,4 @@ export const translations = {
   },
 } as const;
 
-export type T = typeof translations.ko;
+export type T = typeof translations[Locale];
