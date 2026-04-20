@@ -14,6 +14,8 @@ const DB_VERSION = 1;
 const STORE_TODOS = 'todos';
 const STORE_SENT = 'sentNotifications';
 
+let isMuted = false;
+
 /** @returns {Promise<IDBDatabase>} */
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -67,9 +69,14 @@ async function wasSent(key) {
 async function markSent(key) {
   try {
     const db = await openDB();
-    db.transaction(STORE_SENT, 'readwrite')
-      .objectStore(STORE_SENT)
-      .put({ key, sentAt: Date.now() });
+    return new Promise((resolve) => {
+      const req = db
+        .transaction(STORE_SENT, 'readwrite')
+        .objectStore(STORE_SENT)
+        .put({ key, sentAt: Date.now() });
+      req.onsuccess = () => resolve();
+      req.onerror = () => resolve();
+    });
   } catch {
     // ignore
   }
@@ -80,14 +87,18 @@ async function cleanOldSent() {
   try {
     const db = await openDB();
     const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
-    const tx = db.transaction(STORE_SENT, 'readwrite');
-    const store = tx.objectStore(STORE_SENT);
-    const req = store.getAll();
-    req.onsuccess = () => {
-      for (const record of req.result) {
-        if (record.sentAt < cutoff) store.delete(record.key);
-      }
-    };
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_SENT, 'readwrite');
+      const store = tx.objectStore(STORE_SENT);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        for (const record of req.result) {
+          if (record.sentAt < cutoff) store.delete(record.key);
+        }
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
   } catch {
     // ignore
   }
@@ -102,7 +113,61 @@ function formatDateTime(isoStr) {
   ).padStart(2, '0')}`;
 }
 
+/** 앱 실행 시 마감 초과된 미전송 항목을 최대 3개씩 발송
+ *  매 호출마다 미전송 목록을 새로 조회하므로 offset 불필요
+ */
+async function notifyAllOverdue() {
+  if (isMuted) return;
+  const todos = await getTodos();
+  const now = Date.now();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const targets = [];
+  for (const todo of todos) {
+    if (todo.completed || !todo.dueDate) continue;
+    if (new Date(todo.dueDate).getTime() > now) continue;
+    const key = `${todo.id}-alarm-${today}`;
+    const alreadySent = await wasSent(key);
+    if (!alreadySent) targets.push({ todo, key });
+  }
+
+  const batch = targets.slice(0, 3);
+  for (const { todo, key } of batch) {
+    const diff = now - new Date(todo.dueDate).getTime();
+    const mins = Math.floor(diff / 60000);
+    const hrs = Math.floor(mins / 60);
+    const elapsed = hrs > 0 ? `${hrs}시간 ${mins % 60}분 경과` : `${mins}분 경과`;
+
+    try {
+      await self.registration.showNotification('🚨 마감 초과 — 즉시 확인 필요', {
+        body: `${elapsed}\n[${todo.category}] ${todo.text}\n마감: ${formatDateTime(todo.dueDate)}`,
+        icon: '/favicon.ico',
+        badge: '/favicon.ico',
+        tag: key,
+        requireInteraction: true,
+        vibrate: [300, 100, 300, 100, 300],
+        data: { todoId: todo.id, origin: self.location.origin },
+        actions: [
+          { action: 'open', title: '앱 열기' },
+          { action: 'dismiss', title: '닫기' },
+        ],
+      });
+      await markSent(key);
+    } catch (err) {
+      console.error('[SW] 즉시 알림 발송 실패:', err);
+    }
+  }
+
+  // 전송 후 남은 미전송 항목 수를 클라이언트에 전달
+  const remaining = targets.length - batch.length;
+  const clients = await self.clients.matchAll({ includeUncontrolled: true });
+  for (const client of clients) {
+    client.postMessage({ type: 'OVERDUE_BATCH_DONE', remaining });
+  }
+}
+
 async function checkAndNotify() {
+  if (isMuted) return;
   const todos = await getTodos();
   const now = Date.now();
 
@@ -150,7 +215,7 @@ async function checkAndNotify() {
         icon: '/favicon.ico',
         badge: '/favicon.ico',
         tag: notifyKey,
-        requireInteraction: true,
+        requireInteraction: false,
         vibrate: [200, 100, 200],
         data: { todoId: todo.id, origin: self.location.origin },
         actions: [
@@ -159,6 +224,12 @@ async function checkAndNotify() {
         ],
       });
       await markSent(notifyKey);
+
+      // 10초 후 자동 닫기
+      setTimeout(async () => {
+        const notifications = await self.registration.getNotifications({ tag: notifyKey });
+        notifications.forEach((n) => n.close());
+      }, 10000);
     } catch (err) {
       console.error('[SW] 알림 발송 실패:', err);
     }
@@ -172,14 +243,18 @@ self.addEventListener('install', () => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    Promise.all([self.clients.claim(), cleanOldSent(), checkAndNotify()])
-  );
+  // clients.claim()만 waitUntil에 포함 — 나머지는 페이지 로드와 무관하게 실행
+  event.waitUntil(self.clients.claim());
+  setTimeout(() => { cleanOldSent(); checkAndNotify(); }, 0);
 });
 
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'CHECK_NOW') {
-    checkAndNotify();
+    event.waitUntil(checkAndNotify());
+  } else if (event.data?.type === 'NOTIFY_ALL_OVERDUE') {
+    event.waitUntil(notifyAllOverdue());
+  } else if (event.data?.type === 'SET_MUTED') {
+    isMuted = !!event.data.muted;
   }
 });
 
@@ -202,5 +277,4 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// 1분마다 마감 체크
-setInterval(checkAndNotify, 60 * 1000);
+// 앱이 열려 있는 동안 CHECK_NOW 메시지로 1분마다 체크 (useNotifications.ts 참고)
