@@ -1,0 +1,24 @@
+● 개발 서버 실행:
+
+  npm run dev
+
+  빌드 후 프리뷰 (Service Worker는 HTTPS/localhost 필요):
+
+  npm run build
+  npm run preview
+
+
+● 이 프로젝트는 Vite 기반이라 npx로도 실행 가능합니다.
+
+  npx vite
+
+  빌드 후 프리뷰:
+
+  npx vite build
+  npx vite preview
+
+  npm run dev와 동일하게 동작합니다.
+
+
+npx http-server
+npx serve
