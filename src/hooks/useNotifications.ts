@@ -15,8 +15,10 @@ export function useNotifications() {
   // Service Worker 등록
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
+    const basePath = import.meta.env.BASE_URL || '/';
+    const swPath = new URL('sw.js', basePath).pathname;
     navigator.serviceWorker
-      .register('/sw.js')
+      .register(swPath)
       .then((reg) => {
         console.log('[SW] 등록 완료:', reg.scope);
         reg.active?.postMessage({ type: 'SET_MUTED', muted: localStorage.getItem(MUTED_KEY) === 'true' });

@@ -104,6 +104,13 @@ async function cleanOldSent() {
   }
 }
 
+function getBasePath() {
+  // service worker scope에서 기본 경로 추출 (e.g., /todo/)
+  const scope = self.registration?.scope || self.location.pathname;
+  const match = scope.match(/^[^?#]*\//);
+  return match ? match[0] : '/';
+}
+
 function formatDateTime(isoStr) {
   const d = new Date(isoStr);
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(
@@ -139,14 +146,15 @@ async function notifyAllOverdue() {
     const elapsed = hrs > 0 ? `${hrs}시간 ${mins % 60}분 경과` : `${mins}분 경과`;
 
     try {
+      const basePath = getBasePath();
       await self.registration.showNotification('🚨 마감 초과 — 즉시 확인 필요', {
         body: `${elapsed}\n[${todo.category}] ${todo.text}\n마감: ${formatDateTime(todo.dueDate)}`,
-        icon: '/favicon.ico',
-        badge: '/favicon.ico',
+        icon: `${basePath}favicon.ico`,
+        badge: `${basePath}favicon.ico`,
         tag: key,
         requireInteraction: true,
         vibrate: [300, 100, 300, 100, 300],
-        data: { todoId: todo.id, origin: self.location.origin },
+        data: { todoId: todo.id, basePath },
         actions: [
           { action: 'open', title: '앱 열기' },
           { action: 'dismiss', title: '닫기' },
@@ -210,14 +218,15 @@ async function checkAndNotify() {
     if (alreadySent) continue;
 
     try {
+      const basePath = getBasePath();
       await self.registration.showNotification(title, {
         body,
-        icon: '/favicon.ico',
-        badge: '/favicon.ico',
+        icon: `${basePath}favicon.ico`,
+        badge: `${basePath}favicon.ico`,
         tag: notifyKey,
         requireInteraction: false,
         vibrate: [200, 100, 200],
-        data: { todoId: todo.id, origin: self.location.origin },
+        data: { todoId: todo.id, basePath },
         actions: [
           { action: 'open', title: '앱 열기' },
           { action: 'dismiss', title: '닫기' },
@@ -262,13 +271,14 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'dismiss') return;
 
-  const targetUrl = event.notification.data?.origin ?? '/';
+  const basePath = event.notification.data?.basePath ?? getBasePath();
+  const targetUrl = new URL(basePath, self.location.origin).href.slice(0, -1); // 끝의 / 제거
   event.waitUntil(
     self.clients
       .matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
         for (const client of clientList) {
-          if (client.url.startsWith(targetUrl) && 'focus' in client) {
+          if (client.url.includes(basePath.slice(0, -1)) && 'focus' in client) {
             return client.focus();
           }
         }

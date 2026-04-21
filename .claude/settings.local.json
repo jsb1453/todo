@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf dist node_modules)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(powershell.exe -Command '& { $env:PATH = $env:PATH + '\\\\'';C:\\\\Program Files\\\\GitHub CLI'\\\\''; gh api repos/jsb1453/todo/pages/builds --method POST 2>&1 }')",
+      "Bash(powershell.exe -Command '& { $env:PATH = $env:PATH + '\\\\'';C:\\\\Program Files\\\\GitHub CLI'\\\\''; gh api repos/jsb1453/todo/pages/builds/latest 2>&1 }')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Status:', d.get\\('status'\\)\\)\")",
+      "Bash(git checkout *)",
+      "Bash(git stash *)",
+      "WebFetch(domain:jsb1453.github.io)",
+      "Bash(timeout 5 npm run dev)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173/todo/)",
+      "Bash(pkill -f \"node.*vite\")",
+      "Bash(rm -rf node_modules package-lock.json)",
+      "Bash(npm install *)",
+      "Bash(rm -rf assets favicon.svg icons.svg index.html sw.js)",
+      "Bash(cp -r dist/* .)",
+      "Bash(cp -r dist /tmp/todo_dist)",
+      "Bash(rm -rf assets favicon.svg icons.svg index.html sw.js .vite .claude/settings.local.json)",
+      "Bash(cp -r /tmp/todo_dist/* .)",
+      "Bash(git clean *)",
+      "Bash(git reset *)",
+      "Bash(powershell.exe -Command \"Remove-Item -Recurse -Force proc 2>/dev/null; if \\(Test-Path proc\\) { 'Failed to delete proc folder' } else { 'Proc folder deleted successfully' }\")",
+      "Bash(powershell.exe -Command '& { $env:PATH = $env:PATH + '\\\\'';C:\\\\Program Files\\\\GitHub CLI'\\\\''; until \\(gh api repos/jsb1453/todo/pages/builds/latest 2>&1 | powershell.exe -Command \"[Console]::In | ConvertFrom-Json | Select -ExpandProperty status\" | Select-String -Pattern '\\\\''^built$|^errored$'\\\\'' -Quiet\\) { Start-Sleep -Seconds 3 }; echo '\\\\''Build complete'\\\\'' }')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Build Status:', d.get\\('status'\\)\\)\")",
+      "Bash(curl -s -I \"https://jsb1453.github.io/todo/assets/index-BdDiNKW6.js\")",
+      "Bash(npx serve *)",
+      "Bash(curl -s \"http://localhost:3000/\")",
+      "Bash(curl -s \"https://jsb1453.github.io/todo/assets/index-BdDiNKW6.js\")"
+    ]
+  }
+}
